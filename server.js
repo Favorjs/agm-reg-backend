@@ -1012,7 +1012,117 @@ app.get('/api/confirm/:token', async (req, res) => {
   }
 });
 
-// All other existing routes remain the same...
+// Guest registration endpoint
+app.post('/api/register-guest', async (req, res) => {
+  const { name, email, phone, userType } = req.body;
+
+  if (!name || !email || !phone || !userType) {
+    return res.status(400).json({ success: false, error: 'All fields are required' });
+  }
+
+  try {
+    // Check for duplicate email
+    const existing = await GuestRegistration.findOne({ where: { email } });
+    if (existing) {
+      return res.status(400).json({ success: false, error: 'This email is already registered' });
+    }
+
+    const guest = await GuestRegistration.create({ name, email, phone, userType });
+
+    // Send confirmation email
+    const typeLabel = { guest: 'Guest', regulator: 'Regulator', 'external-auditor': 'External Auditor' }[userType] || userType;
+
+    const emailHtml = `
+    <body style="font-family: Arial, sans-serif; background-color: #f6f9fc; padding: 20px; color: #333;">
+      <div style="max-width: 600px; margin: auto; background: #ffffff; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+
+        <h2 style="color: #107b5f; text-align: center;">🎉 Registration Successful!</h2>
+
+        <p style="font-size: 15px; line-height: 1.6;">Dear <strong>${name}</strong>,</p>
+        <p style="font-size: 15px; line-height: 1.6;">
+          Your registration for the <strong>Skyway Aviation Handling Company PLC Extraordinary General Meeting</strong> has been received and confirmed.
+        </p>
+
+        <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+          <p style="margin: 5px 0;"><strong>Name:</strong> ${name}</p>
+          <p style="margin: 5px 0;"><strong>Email:</strong> ${email}</p>
+          <p style="margin: 5px 0;"><strong>Attending As:</strong> ${typeLabel}</p>
+        </div>
+
+        <h3 style="color: #107b5f;">What's Next?</h3>
+        <p style="font-size: 15px; line-height: 1.6;">
+          You will receive a <strong>YouTube live stream link</strong> to watch and attend the EGM. Please keep an eye on your inbox closer to the event date.
+        </p>
+
+        <p style="margin-top: 30px; font-size: 14px; text-align: center; color: #666;">
+          For enquiries, contact us at <a href="mailto:registrars@apel.com.ng" style="color: #107b5f;">registrars@apel.com.ng</a><br>
+          <em>— Apel Capital Registrars Limited</em>
+        </p>
+      </div>
+    </body>
+    `;
+
+    try {
+      await mailgunService.sendEmail(
+        email,
+        'Registration Confirmed – Skyway Aviation Handling Company PLC EGM',
+        emailHtml
+      );
+      console.log(`✅ Guest confirmation email sent to ${email}`);
+    } catch (emailError) {
+      console.error('❌ Guest email failed:', emailError.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Registration successful. A confirmation email has been sent.',
+      guest: {
+        id: guest.id,
+        name: guest.name,
+        email: guest.email,
+        phone: guest.phone,
+        userType: guest.userType,
+      }
+    });
+
+  } catch (error) {
+    console.error('Guest registration error:', error);
+    res.status(500).json({ success: false, error: 'Registration failed. Please try again.' });
+  }
+});
+
+// List registered guests
+app.get('/api/registered-guests', async (req, res) => {
+  try {
+    const page     = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize, 10) || 10, 1), 100);
+    const search   = (req.query.search || '').trim();
+    const likeOp   = sequelize.getDialect() === 'postgres' ? Op.iLike : Op.like;
+
+    const where = search ? {
+      [Op.or]: [
+        { name:  { [likeOp]: `%${search}%` } },
+        { email: { [likeOp]: `%${search}%` } },
+        { phone: { [likeOp]: `%${search}%` } },
+      ]
+    } : {};
+
+    const { rows, count } = await GuestRegistration.findAndCountAll({
+      where,
+      order: [['createdAt', 'DESC']],
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+    });
+
+    res.json({
+      data: rows,
+      pagination: { page, pageSize, totalItems: count, totalPages: Math.ceil(count / pageSize) }
+    });
+  } catch (error) {
+    console.error('Registered guests fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch registered guests' });
+  }
+});
 
 // Start server
 const PORT = process.env.PORT;

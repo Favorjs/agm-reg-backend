@@ -27,7 +27,7 @@ class MailgunService {
   constructor() {
     this.domain = process.env.MAILGUN_DOMAIN || 'registrars.apel.com.ng';
     this.fromEmail = process.env.MAILGUN_FROM_EMAIL || 'alerts@registrars.apel.com.ng';
-    this.fromName = 'LASACO EGM';
+    this.fromName = 'SAHCO AGM';
   }
 
   // Send email via Mailgun
@@ -615,7 +615,7 @@ app.post('/api/send-confirmation', async (req, res) => {
       expires_at: expiresAt 
     });
 
-    const confirmUrl = `https://api.lasaco.apel.com.ng/api/confirm/${token}`;
+    const confirmUrl = `https://api.sahco.apel.com.ng/api/confirm/${token}`;
 
     // Email sending with Mailgun
     let emailSent = false;
@@ -625,12 +625,12 @@ app.post('/api/send-confirmation', async (req, res) => {
       const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
        
-          <h1 style="color: black; margin: 0;"> LASACO ASSURANCE PLC</h1>
+          <h1 style="color: black; margin: 0;"> Skyway Aviation Handling Company PLC</h1>
           <p style="color: black; margin: 5px 0 0 0;">Extraordinary General Meeting Registration</p>
   
         <div style="padding: 30px 20px;">
           <h2 style="color: #333;">Hello ${shareholder.name},</h2>
-          <p>Thank you for registering for the LASACO ASSURANCE PLC Extraordinary General Meeting.</p>
+          <p>Thank you for registering for the Skyway Aviation Handling Company PLC Extraordinary General Meeting.</p>
           <p>Please click the button below to confirm your registration:</p>
           
           <div style="text-align: center; margin: 30px 0;">
@@ -655,7 +655,7 @@ app.post('/api/send-confirmation', async (req, res) => {
         
         <div style="background-color: #f8f9fa; padding: 15px; text-align: center; border-radius: 0 0 10px 10px;">
           <p style="margin: 0; color: #666; font-size: 12px;">
-            LASACO ASSURANCE PLC © ${new Date().getFullYear()}
+            Skyway Aviation Handling Company PLC © ${new Date().getFullYear()}
           </p>
         </div>
       </div>
@@ -664,7 +664,7 @@ app.post('/api/send-confirmation', async (req, res) => {
       // Send email using Mailgun
       await mailgunService.sendEmail(
         shareholder.email, 
-        'Confirm Your Registration - LASACO ASSURANCE PLC EGM', 
+        'Confirm Your Registration - Skyway Aviation Handling Company PLC AGM', 
         emailHtml
       );
       emailSent = true;
@@ -685,7 +685,7 @@ app.post('/api/send-confirmation', async (req, res) => {
         
         if (formattedPhone && isValidNigerianPhone(formattedPhone)) {
           await twilioClient.messages.create({
-            body: `Hello ${shareholder.name}, confirm LASACO ASSURANCE PLC EGM REGISTRATION: ${confirmUrl}`,
+            body: `Hello ${shareholder.name}, confirm Skyway Aviation Handling Company PLC AGM REGISTRATION: ${confirmUrl}`,
             from: process.env.TWILIO_PHONE_NUMBER,
             to: formattedPhone
           });
@@ -919,7 +919,7 @@ app.get('/api/confirm/:token', async (req, res) => {
         <h2 style="color:#1075bf; text-align: center;">🎉 Hello ${shareholder.name},</h2>
         
         <p style="font-size: 15px; line-height: 1.6;">
-          Your registration for the <strong>LASACO ASSURANCE PLC Extraordinary General Meeting</strong> is now complete.
+          Your registration for the <strong>Skyway Aviation Handling Company PLC Extraordinary General Meeting</strong> is now complete.
         </p>
 
         <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
@@ -943,7 +943,7 @@ app.get('/api/confirm/:token', async (req, res) => {
 
         <p style="margin-top: 30px; font-size: 14px; text-align: center; color: #666;">
           Thank you for participating! <br>
-          <em>— LASACO ASSURANCE PLC Team</em>
+          <em>— Skyway Aviation Handling Company PLC Team</em>
         </p>
       </div>
     </body>
@@ -952,7 +952,7 @@ app.get('/api/confirm/:token', async (req, res) => {
     try {
       await mailgunService.sendEmail(
         shareholder.email,
-        '✅ Registration Complete - LASACO ASSURANCE PLC EGM',
+        '✅ Registration Complete - Skyway Aviation Handling Company PLC AGM',
         successEmailHtml
       );
       console.log(`✅ Registration confirmation email sent via Mailgun to ${shareholder.email}`);
@@ -987,7 +987,7 @@ app.get('/api/confirm/:token', async (req, res) => {
         <div class="success">✅ Registration Successful</div>
         <div class="details">
           <h2>Hello ${shareholder.name}</h2>
-          <p>Your registration for the LASACO ASSURANCE PLC EGM is complete.</p>
+          <p>Your registration for the Skyway Aviation Handling Company PLC AGM is complete.</p>
           <p><strong>ACNO:</strong> ${shareholder.acno}</p>
           <p><strong>Email:</strong> ${shareholder.email}</p>
           <p>You will receive meeting details via email before the event.</p>

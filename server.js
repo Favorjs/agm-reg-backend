@@ -645,7 +645,14 @@ app.post('/api/send-confirmation', async (req, res) => {
           <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <p style="margin: 5px 0;"><strong>Account Number:</strong> ${shareholder.acno}</p>
             <p style="margin: 5px 0;"><strong>Email:</strong> ${shareholder.email}</p>
-            <p style="margin: 5px 0;"><strong>Expires:</strong> ${expiresAt.toLocaleString()}</p>
+            <p style="margin: 5px 0;"><strong>Link Expires:</strong> ${expiresAt.toLocaleString()}</p>
+          </div>
+
+          <div style="background: #0f3d2e; color: #ffffff; padding: 18px 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+            <p style="margin: 0 0 4px 0; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.8;">Event Details</p>
+            <p style="margin: 0; font-size: 18px; font-weight: bold;">Friday, 19th June 2026</p>
+            <p style="margin: 4px 0 0 0; font-size: 15px;">11:00 AM</p>
+            <p style="margin: 6px 0 0 0; font-size: 13px; opacity: 0.85;">Skyway Aviation Handling Company PLC — Electronic Meeting</p>
           </div>
           
           <p style="color: #666; font-size: 14px;">
@@ -923,8 +930,15 @@ app.get('/api/confirm/:token', async (req, res) => {
         </p>
 
         <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
-          <p><strong>📌 ACNO:</strong> ${shareholder.acno}</p>
-          <p><strong>📧 Registered Email:</strong> ${shareholder.email}</p>
+          <p style="margin: 5px 0;"><strong>📌 ACNO:</strong> ${shareholder.acno}</p>
+          <p style="margin: 5px 0;"><strong>📧 Registered Email:</strong> ${shareholder.email}</p>
+        </div>
+
+        <div style="background: #0f3d2e; color: #ffffff; padding: 18px 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+          <p style="margin: 0 0 4px 0; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.8;">Event Details</p>
+          <p style="margin: 0; font-size: 18px; font-weight: bold;">Friday, 19th June 2026</p>
+          <p style="margin: 4px 0 0 0; font-size: 15px;">11:00 AM</p>
+          <p style="margin: 6px 0 0 0; font-size: 13px; opacity: 0.85;">Skyway Aviation Handling Company PLC — Electronic Meeting</p>
         </div>
 
         <h3 style="color:#1075bf;">Next Steps:</h3>
@@ -1049,9 +1063,16 @@ app.post('/api/register-guest', async (req, res) => {
           <p style="margin: 5px 0;"><strong>Attending As:</strong> ${typeLabel}</p>
         </div>
 
+        <div style="background: #0f3d2e; color: #ffffff; padding: 18px 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+          <p style="margin: 0 0 4px 0; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.8;">Event Details</p>
+          <p style="margin: 0; font-size: 18px; font-weight: bold;">Friday, 19th June 2026</p>
+          <p style="margin: 4px 0 0 0; font-size: 15px;">11:00 AM</p>
+          <p style="margin: 6px 0 0 0; font-size: 13px; opacity: 0.85;">Skyway Aviation Handling Company PLC — Electronic Meeting</p>
+        </div>
+
         <h3 style="color: #107b5f;">What's Next?</h3>
         <p style="font-size: 15px; line-height: 1.6;">
-          You will receive a <strong>YouTube live stream link</strong> to watch and attend the EGM. Please keep an eye on your inbox closer to the event date.
+          You will receive a <strong>YouTube live stream link</strong> to watch and attend the EGM closer to the event date. Please keep an eye on your inbox.
         </p>
 
         <p style="margin-top: 30px; font-size: 14px; text-align: center; color: #666;">
@@ -1065,7 +1086,7 @@ app.post('/api/register-guest', async (req, res) => {
     try {
       await mailgunService.sendEmail(
         email,
-        'Registration Confirmed – Skyway Aviation Handling Company PLC EGM',
+        'Registration Confirmed – Skyway Aviation Handling Company PLC AGM',
         emailHtml
       );
       console.log(`✅ Guest confirmation email sent to ${email}`);

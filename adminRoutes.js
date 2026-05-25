@@ -105,7 +105,9 @@ module.exports = (models, mailgunService) => {
   router.post('/companies', requireSuperAdmin, async (req, res) => {
     try {
       const company = await Company.create(req.body);
-      res.status(201).json(company);
+      const json = company.get({ plain: true });
+      console.log('[POST /companies] created id:', json.id);
+      res.status(201).json(json);
     } catch (err) {
       console.error('[POST /companies]', dbErr(err));
       res.status(400).json({ error: dbErr(err) });

@@ -229,7 +229,7 @@ const corsOptions = {
   
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-Slug', 'X-Company-Subdomain']
 };
 
 app.use(cors(corsOptions));
@@ -241,7 +241,7 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Company-Slug, X-Company-Subdomain');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   next();
 });
@@ -1156,11 +1156,43 @@ const platformModels = initModels(sequelize);
 app.use('/api/admin',   adminRoutes(platformModels, mailgunService));
 app.use('/api/company', companyRoutes(platformModels, mailgunService, twilioClient));
 
+// Explicit migrations — runs before sync to handle changes that alter:true misses in PostgreSQL
+async function runMigrations() {
+  try {
+    // Add registration_closed_at to companies if it doesn't exist yet
+    await sequelize.query(`
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS registration_closed_at TIMESTAMPTZ;
+    `);
+    console.log('✅ Migration: companies.registration_closed_at OK');
+  } catch (e) {
+    console.warn('Migration (registration_closed_at):', e.message);
+  }
+
+  try {
+    // Make subdomain nullable (was NOT NULL in original schema)
+    await sequelize.query(`
+      ALTER TABLE companies ALTER COLUMN subdomain DROP NOT NULL;
+    `);
+    console.log('✅ Migration: companies.subdomain nullable OK');
+  } catch (e) {
+    // "there is no constraint" means it's already nullable — safe to ignore
+    if (!e.message.includes('does not exist') && !e.message.includes('no constraint')) {
+      console.warn('Migration (subdomain nullable):', e.message);
+    }
+  }
+}
+
 // Start server
 const PORT = process.env.PORT;
-sequelize.sync({ alter: true }).then(() => {
-  console.log('✅ Database synced');
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on ${PORT}`);
+runMigrations()
+  .then(() => sequelize.sync({ alter: true }))
+  .then(() => {
+    console.log('✅ Database synced');
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on ${PORT}`);
+    });
+  })
+  .catch(err => {
+    console.error('❌ Startup failed:', err.message);
+    process.exit(1);
   });
-});

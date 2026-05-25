@@ -1158,28 +1158,51 @@ app.use('/api/company', companyRoutes(platformModels, mailgunService, twilioClie
 
 // Explicit migrations — runs before sync to handle changes that alter:true misses in PostgreSQL
 async function runMigrations() {
-  try {
-    // Add registration_closed_at to companies if it doesn't exist yet
-    await sequelize.query(`
-      ALTER TABLE companies ADD COLUMN IF NOT EXISTS registration_closed_at TIMESTAMPTZ;
-    `);
-    console.log('✅ Migration: companies.registration_closed_at OK');
-  } catch (e) {
-    console.warn('Migration (registration_closed_at):', e.message);
-  }
-
-  try {
-    // Make subdomain nullable (was NOT NULL in original schema)
-    await sequelize.query(`
-      ALTER TABLE companies ALTER COLUMN subdomain DROP NOT NULL;
-    `);
-    console.log('✅ Migration: companies.subdomain nullable OK');
-  } catch (e) {
-    // "there is no constraint" means it's already nullable — safe to ignore
-    if (!e.message.includes('does not exist') && !e.message.includes('no constraint')) {
-      console.warn('Migration (subdomain nullable):', e.message);
+  // Helper: add a column if it doesn't exist yet (safe to call repeatedly)
+  const addCol = async (table, col, definition) => {
+    try {
+      await sequelize.query(`ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${col}" ${definition}`);
+      console.log(`✅ Migration: ${table}.${col} OK`);
+    } catch (e) {
+      const msg = e?.original?.message || e.message;
+      // "already exists" is fine — column is already there
+      if (!msg.toLowerCase().includes('already exists')) {
+        console.warn(`⚠️  Migration (${table}.${col}): ${msg}`);
+      }
     }
-  }
+  };
+
+  // Drop a NOT NULL constraint safely
+  const dropNotNull = async (table, col) => {
+    try {
+      await sequelize.query(`ALTER TABLE "${table}" ALTER COLUMN "${col}" DROP NOT NULL`);
+      console.log(`✅ Migration: ${table}.${col} DROP NOT NULL OK`);
+    } catch (e) {
+      const msg = e?.original?.message || e.message;
+      if (!msg.toLowerCase().includes('not marked not null') && !msg.toLowerCase().includes('does not exist')) {
+        console.warn(`⚠️  Migration (DROP NOT NULL ${table}.${col}): ${msg}`);
+      }
+    }
+  };
+
+  // companies — add any column that may have been added after initial deploy
+  await addCol('companies', 'meeting_type',            "VARCHAR(255) DEFAULT 'EGM'");
+  await addCol('companies', 'meeting_date',            'VARCHAR(255)');
+  await addCol('companies', 'meeting_time',            'VARCHAR(255)');
+  await addCol('companies', 'zoom_link',               'TEXT');
+  await addCol('companies', 'youtube_link',            'TEXT');
+  await addCol('companies', 'logo_url',                'TEXT');
+  await addCol('companies', 'logo2_url',               'TEXT');
+  await addCol('companies', 'primary_color',           "VARCHAR(255) DEFAULT '#107b5f'");
+  await addCol('companies', 'from_name',               "VARCHAR(255) DEFAULT 'Apel Capital Registrars'");
+  await addCol('companies', 'is_registration_open',   'BOOLEAN DEFAULT false');
+  await addCol('companies', 'registration_closed_at', 'TIMESTAMPTZ');
+  await addCol('companies', 'is_active',               'BOOLEAN DEFAULT true');
+
+  // subdomain was NOT NULL — relax it so new companies don't need one
+  await dropNotNull('companies', 'subdomain');
+
+  console.log('✅ All migrations complete');
 }
 
 // Start server

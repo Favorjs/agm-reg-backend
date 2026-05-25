@@ -5,7 +5,7 @@ module.exports = (sequelize) => {
   const Company = sequelize.define('Company', {
     id:           { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     slug:         { type: DataTypes.STRING, allowNull: false, unique: true },  // sahco, lasaco
-    subdomain:    { type: DataTypes.STRING, allowNull: false, unique: true },  // sahco.apel.com.ng
+    subdomain:    { type: DataTypes.STRING, allowNull: true,  unique: true },  // kept for legacy/migration only
     name:         { type: DataTypes.STRING, allowNull: false },
     meeting_type: { type: DataTypes.STRING, defaultValue: 'EGM' },            // AGM | EGM
     meeting_date: { type: DataTypes.STRING, allowNull: true },                 // "Friday, 19th June 2026"

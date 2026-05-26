@@ -94,7 +94,7 @@ module.exports = (sequelize) => {
     name:       { type: DataTypes.STRING, allowNull: false },
     email:      { type: DataTypes.STRING, allowNull: false },
     phone:      { type: DataTypes.STRING, allowNull: false },
-    user_type:  { type: DataTypes.ENUM('guest', 'regulator', 'external-auditor'), allowNull: false },
+    user_type:  { type: DataTypes.ENUM('regulator', 'external-auditor'), allowNull: false },
   }, {
     tableName: 'company_guests',
     timestamps: true,

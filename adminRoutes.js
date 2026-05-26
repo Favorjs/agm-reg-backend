@@ -39,6 +39,15 @@ function dbErr(err) {
   return err?.original?.message || err?.message || String(err);
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function validId(req, res) {
+  if (!UUID_RE.test(req.params.id)) {
+    res.status(400).json({ error: `Invalid company ID "${req.params.id}" — must be a UUID` });
+    return false;
+  }
+  return true;
+}
+
 // ── Cloudinary multer storage ────────────────────────────────────────────────
 const logoStorage = new CloudinaryStorage({
   cloudinary,
@@ -116,6 +125,7 @@ module.exports = (models, mailgunService) => {
 
   // ── GET /api/admin/companies/:id ──────────────────────────────────────────
   router.get('/companies/:id', requireAdmin, async (req, res) => {
+    if (!validId(req, res)) return;
     try {
       const company = await Company.findByPk(req.params.id);
       if (!company) return res.status(404).json({ error: 'Not found' });
@@ -128,6 +138,7 @@ module.exports = (models, mailgunService) => {
 
   // ── PUT /api/admin/companies/:id ──────────────────────────────────────────
   router.put('/companies/:id', requireAdmin, async (req, res) => {
+    if (!validId(req, res)) return;
     try {
       const company = await Company.findByPk(req.params.id);
       if (!company) return res.status(404).json({ error: 'Not found' });
@@ -154,7 +165,7 @@ module.exports = (models, mailgunService) => {
   });
 
   // ── POST /api/admin/companies/:id/logo ────────────────────────────────────
-  router.post('/companies/:id/logo', requireAdmin, uploadLogo.fields([
+  router.post('/companies/:id/logo', requireAdmin, (req, res, next) => { if (!validId(req, res)) return; next(); }, uploadLogo.fields([
     { name: 'logo', maxCount: 1 },
     { name: 'logo2', maxCount: 1 },
   ]), async (req, res) => {
@@ -174,6 +185,7 @@ module.exports = (models, mailgunService) => {
 
   // ── DELETE /api/admin/companies/:id/logo/:which ──────────────────────────
   router.delete('/companies/:id/logo/:which', requireAdmin, async (req, res) => {
+    if (!validId(req, res)) return;
     try {
       const company = await Company.findByPk(req.params.id);
       if (!company) return res.status(404).json({ error: 'Not found' });
@@ -196,6 +208,7 @@ module.exports = (models, mailgunService) => {
 
   // ── DELETE /api/admin/companies/:id/shareholders ──────────────────────────
   router.delete('/companies/:id/shareholders', requireAdmin, async (req, res) => {
+    if (!validId(req, res)) return;
     try {
       const company = await Company.findByPk(req.params.id);
       if (!company) return res.status(404).json({ error: 'Company not found' });
@@ -211,6 +224,7 @@ module.exports = (models, mailgunService) => {
   // ── POST /api/admin/companies/:id/import-shareholders ─────────────────────
   router.post('/companies/:id/import-shareholders',
     requireAdmin,
+    (req, res, next) => { if (!validId(req, res)) return; next(); },
     multer({ storage: multer.memoryStorage() }).single('file'),
     async (req, res) => {
       try {
@@ -254,6 +268,7 @@ module.exports = (models, mailgunService) => {
 
   // ── GET /api/admin/companies/:id/shareholders ──────────────────────────────
   router.get('/companies/:id/shareholders', requireAdmin, async (req, res) => {
+    if (!validId(req, res)) return;
     try {
       const page     = Math.max(parseInt(req.query.page) || 1, 1);
       const pageSize = Math.min(parseInt(req.query.pageSize) || 20, 100);
@@ -272,6 +287,7 @@ module.exports = (models, mailgunService) => {
 
   // ── GET /api/admin/companies/:id/registrations ────────────────────────────
   router.get('/companies/:id/registrations', requireAdmin, async (req, res) => {
+    if (!validId(req, res)) return;
     try {
       const [shareholders, guests] = await Promise.all([
         CompanyRegisteredHolder.findAll({ where: { company_id: req.params.id }, order: [['registered_at', 'DESC']] }),

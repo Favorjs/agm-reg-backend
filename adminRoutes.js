@@ -231,14 +231,37 @@ module.exports = (models, mailgunService) => {
         const company = await Company.findByPk(req.params.id);
         if (!company) return res.status(404).json({ error: 'Company not found' });
 
-        const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+        const wb = XLSX.read(req.file.buffer, { type: 'buffer', cellText: true, cellDates: true });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        // raw:false → use the formatted text Excel displays, not the underlying number
+        // This preserves leading zeros when the cell is formatted as Text in Excel
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+
+        // Restore a leading zero stripped by Excel from Nigerian phone numbers
+        // e.g. 8012345678 (10 digits, starts with 7/8/9) → 08012345678
+        function fixPhone(val) {
+          const s = String(val || '').trim();
+          if (!s) return null;
+          if (/^[789]\d{9}$/.test(s)) return `0${s}`;   // 10-digit local, missing leading 0
+          if (/^\d{13}$/.test(s) && s.startsWith('234')) return `+${s}`; // 234XXXXXXXXXX → +234...
+          return s;
+        }
+
+        // Restore leading zeros stripped from account / CHN / RIN numbers
+        // Uses the original raw numeric value from the cell when the formatted string lost it
+        function fixNumericStr(row, ...keys) {
+          for (const key of keys) {
+            const raw = row[key];
+            if (raw === undefined || raw === null || raw === '') continue;
+            return String(raw).trim();
+          }
+          return '';
+        }
 
         let created = 0, updated = 0, errors = [];
 
         for (const row of rows) {
-          const acno = String(row['Account No'] || row['acno'] || row['ACNO'] || '').trim();
+          const acno = fixNumericStr(row, 'Account No', 'acno', 'ACNO');
           const name = String(row['Name'] || row['name'] || '').trim();
           if (!acno || !name) { errors.push(`Skipped row: ${JSON.stringify(row)}`); continue; }
 
@@ -247,10 +270,10 @@ module.exports = (models, mailgunService) => {
             acno,
             name,
             email:        String(row['Email'] || row['email'] || '').trim() || null,
-            phone_number: String(row['Phone'] || row['phone'] || row['phone_number'] || '').trim() || null,
-            holdings:     parseFloat(row['Holdings'] || row['holdings'] || 0) || 0,
-            chn:          String(row['CHN'] || row['chn'] || '').trim() || null,
-            rin:          String(row['RIN'] || row['rin'] || '').trim() || null,
+            phone_number: fixPhone(row['Phone'] || row['phone'] || row['phone_number']),
+            holdings:     parseFloat(String(row['Holdings'] || row['holdings'] || '0').replace(/,/g, '')) || 0,
+            chn:          fixNumericStr(row, 'CHN', 'chn') || null,
+            rin:          fixNumericStr(row, 'RIN', 'rin') || null,
             address:      String(row['Address'] || row['address'] || '').trim() || null,
           };
 
@@ -265,6 +288,35 @@ module.exports = (models, mailgunService) => {
       }
     }
   );
+
+  // ── POST /api/admin/companies/:id/shareholders/single ─────────────────────
+  router.post('/companies/:id/shareholders/single', requireAdmin, async (req, res) => {
+    if (!validId(req, res)) return;
+    try {
+      const company = await Company.findByPk(req.params.id);
+      if (!company) return res.status(404).json({ error: 'Company not found' });
+
+      const { acno, name, email, phone_number, holdings, chn, rin, address } = req.body;
+      if (!acno || !name) return res.status(400).json({ error: 'Account No and Name are required' });
+
+      const [shareholder, created] = await CompanyShareholder.upsert({
+        company_id:   company.id,
+        acno:         String(acno).trim(),
+        name:         String(name).trim(),
+        email:        email ? String(email).trim() : null,
+        phone_number: phone_number ? String(phone_number).trim() : null,
+        holdings:     parseFloat(String(holdings || '0').replace(/,/g, '')) || 0,
+        chn:          chn ? String(chn).trim() : null,
+        rin:          rin ? String(rin).trim() : null,
+        address:      address ? String(address).trim() : null,
+      }, { conflictFields: ['company_id', 'acno'], returning: true });
+
+      res.status(created ? 201 : 200).json({ success: true, created, shareholder: shareholder[0] ?? shareholder });
+    } catch (err) {
+      console.error('[POST /shareholders/single]', dbErr(err));
+      res.status(400).json({ error: dbErr(err) });
+    }
+  });
 
   // ── GET /api/admin/companies/:id/shareholders ──────────────────────────────
   router.get('/companies/:id/shareholders', requireAdmin, async (req, res) => {

@@ -1153,6 +1153,27 @@ const companyRoutes = require('./companyRoutes');
 
 const platformModels = initModels(sequelize);
 
+// Mirror company_registered_holders → registeredusers (same pattern as the legacy RegisteredHolders hook)
+async function syncCompanyHolderToUser(holder) {
+  try {
+    await RegisteredUser.upsert({
+      acno:         holder.acno,
+      name:         holder.name,
+      email:        holder.email,
+      phone_number: holder.phone_number,
+      holdings:     holder.holdings,
+      chn:          holder.chn,
+      registered_at: holder.registered_at,
+    });
+    console.log('[sync] company_registered_holders → registeredusers:', holder.acno);
+  } catch (err) {
+    console.error('[sync] company holder → registeredusers failed:', err.message);
+  }
+}
+
+platformModels.CompanyRegisteredHolder.addHook('afterCreate', syncCompanyHolderToUser);
+platformModels.CompanyRegisteredHolder.addHook('afterUpdate', syncCompanyHolderToUser);
+
 app.use('/api/admin',   adminRoutes(platformModels, mailgunService));
 app.use('/api/company', companyRoutes(platformModels, mailgunService, twilioClient));
 

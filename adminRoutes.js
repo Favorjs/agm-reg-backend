@@ -337,6 +337,118 @@ module.exports = (models, mailgunService) => {
     }
   });
 
+  // ── POST /api/admin/companies/:id/broadcast-email ─────────────────────────
+  router.post('/companies/:id/broadcast-email', requireAdmin, async (req, res) => {
+    if (!validId(req, res)) return;
+    try {
+      const company = await Company.findByPk(req.params.id);
+      if (!company) return res.status(404).json({ error: 'Company not found' });
+
+      const [holders, guests] = await Promise.all([
+        CompanyRegisteredHolder.findAll({ where: { company_id: company.id } }),
+        CompanyGuest.findAll({ where: { company_id: company.id } }),
+      ]);
+
+      // Collect unique email → name pairs from both lists
+      const recipients = new Map();
+      for (const h of holders) {
+        if (h.email) recipients.set(h.email.toLowerCase(), { name: h.name, email: h.email });
+      }
+      for (const g of guests) {
+        if (g.email) recipients.set(g.email.toLowerCase(), { name: g.name, email: g.email });
+      }
+
+      if (recipients.size === 0) {
+        return res.status(400).json({ error: 'No registered emails to send to' });
+      }
+
+      // Format stored date/time values for display
+      function fmtDate(d) {
+        if (!d) return 'TBA';
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+          return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', {
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+          });
+        }
+        return d;
+      }
+      function fmtTime(t) {
+        if (!t) return '';
+        if (/[ap]m/i.test(t)) return t;
+        const [h, m] = t.split(':').map(Number);
+        return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+      }
+
+      const meetingDate = fmtDate(company.meeting_date);
+      const meetingTime = fmtTime(company.meeting_time);
+      const zoomLink    = company.zoom_link;
+      const youtubeLink = company.youtube_link;
+      const fromName    = company.from_name || 'Apel Capital Registrars';
+
+      const buildHtml = (name) => `
+        <body style="font-family:Arial,sans-serif;background:#f6f9fc;padding:20px;color:#333;">
+          <div style="max-width:600px;margin:auto;background:#fff;padding:25px;border-radius:10px;box-shadow:0 4px 10px rgba(0,0,0,.1);">
+
+            <h2 style="color:#0f3d2e;text-align:center;">${company.name}</h2>
+            <p style="text-align:center;margin:-10px 0 20px;color:#64748b;font-size:14px;">${company.meeting_type} — Meeting Access Links</p>
+
+            <p style="font-size:15px;line-height:1.6;">Dear <strong>${name}</strong>,</p>
+            <p style="font-size:15px;line-height:1.6;">
+              Please find below the access links for the upcoming <strong>${company.name} ${company.meeting_type}</strong>.
+            </p>
+
+            <div style="background:#f1f5f9;padding:15px;border-radius:8px;margin:20px 0;">
+              <p style="margin:5px 0;"><strong>📅 Date:</strong> ${meetingDate}</p>
+              ${meetingTime ? `<p style="margin:5px 0;"><strong>🕐 Time:</strong> ${meetingTime}</p>` : ''}
+            </div>
+
+            ${zoomLink ? `
+            <div style="text-align:center;margin:20px 0;">
+              <p style="font-weight:bold;color:#0f3d2e;margin-bottom:8px;">Join / Vote via Zoom</p>
+              <a href="${zoomLink}"
+                 style="background:#0f3d2e;color:#fff;padding:13px 28px;text-decoration:none;border-radius:6px;font-size:15px;font-weight:bold;display:inline-block;">
+                🎥 Join Zoom Meeting
+              </a>
+            </div>` : ''}
+
+            ${youtubeLink ? `
+            <div style="text-align:center;margin:20px 0;">
+              <p style="font-weight:bold;color:#dc2626;margin-bottom:8px;">Watch Live on YouTube</p>
+              <a href="${youtubeLink}"
+                 style="background:#dc2626;color:#fff;padding:13px 28px;text-decoration:none;border-radius:6px;font-size:15px;font-weight:bold;display:inline-block;">
+                ▶ Watch Live Stream
+              </a>
+            </div>` : ''}
+
+            <p style="margin-top:30px;font-size:13px;text-align:center;color:#64748b;">
+              For enquiries contact us at <a href="mailto:registrars@apel.com.ng" style="color:#0f3d2e;">registrars@apel.com.ng</a><br>
+              <em>— ${fromName}</em>
+            </p>
+          </div>
+        </body>
+      `;
+
+      let sent = 0, failed = 0;
+      const subject = `Meeting Access Links — ${company.name} ${company.meeting_type}`;
+
+      for (const { name, email } of recipients.values()) {
+        try {
+          await mailgunService.sendEmail(email, subject, buildHtml(name), '', fromName);
+          sent++;
+        } catch (err) {
+          console.error(`[broadcast] failed to send to ${email}:`, err.message);
+          failed++;
+        }
+      }
+
+      console.log(`[broadcast] company=${company.id} sent=${sent} failed=${failed}`);
+      res.json({ success: true, sent, failed, total: recipients.size });
+    } catch (err) {
+      console.error('[POST /broadcast-email]', dbErr(err));
+      res.status(500).json({ error: dbErr(err) });
+    }
+  });
+
   // ── GET /api/admin/companies/:id/registrations ────────────────────────────
   router.get('/companies/:id/registrations', requireAdmin, async (req, res) => {
     if (!validId(req, res)) return;

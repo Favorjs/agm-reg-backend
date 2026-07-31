@@ -27,11 +27,11 @@ class MailgunService {
   constructor() {
     this.domain = process.env.MAILGUN_DOMAIN || 'registrars.apel.com.ng';
     this.fromEmail = process.env.MAILGUN_FROM_EMAIL || 'alerts@registrars.apel.com.ng';
-    this.fromName = 'SAHCO AGM';
+    this.fromName = 'Apel Capital Registrars';
   }
 
   // Send email via Mailgun
-  async sendEmail(to, subject, html, text = '') {
+  async sendEmail(to, subject, html, text = '', fromName = this.fromName) {
     try {
       if (!to || !subject || !html) {
         throw new Error('Missing required email parameters');
@@ -43,7 +43,7 @@ class MailgunService {
       }
 
       const data = {
-        from: `${this.fromName} <${this.fromEmail}>`,
+        from: `${fromName} <${this.fromEmail}>`,
         to: to,
         subject: subject,
         html: html,
@@ -671,9 +671,11 @@ app.post('/api/send-confirmation', async (req, res) => {
 
       // Send email using Mailgun
       await mailgunService.sendEmail(
-        shareholder.email, 
-        'Confirm Your Registration - Skyway Aviation Handling Company PLC AGM', 
-        emailHtml
+        shareholder.email,
+        'Confirm Your Registration - Skyway Aviation Handling Company PLC AGM',
+        emailHtml,
+        '',
+        'Skyway Aviation Handling Company PLC'
       );
       emailSent = true;
       console.log(`✅ Mailgun email sent to ${shareholder.email}`);
@@ -968,7 +970,9 @@ app.get('/api/confirm/:token', async (req, res) => {
       await mailgunService.sendEmail(
         shareholder.email,
         '✅ Registration Complete - Skyway Aviation Handling Company PLC AGM',
-        successEmailHtml
+        successEmailHtml,
+        '',
+        'Skyway Aviation Handling Company PLC'
       );
       console.log(`✅ Registration confirmation email sent via Mailgun to ${shareholder.email}`);
     } catch (emailError) {
@@ -1088,7 +1092,9 @@ app.post('/api/register-guest', async (req, res) => {
       await mailgunService.sendEmail(
         email,
         'Registration Confirmed – Skyway Aviation Handling Company PLC AGM',
-        emailHtml
+        emailHtml,
+        '',
+        'Skyway Aviation Handling Company PLC'
       );
       console.log(`✅ Guest confirmation email sent to ${email}`);
     } catch (emailError) {

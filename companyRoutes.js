@@ -239,7 +239,7 @@ module.exports = (models, mailgunService, twilioClient) => {
               <p style="color:#888; font-size:13px; text-align:center;">— Apel Capital Registrars Limited</p>
             </div>
           </body>`;
-          await mailgunService.sendEmail(recipientEmail, `Confirm Registration – ${company.name} ${company.meeting_type}`, html);
+          await mailgunService.sendEmail(recipientEmail, `Confirm Registration – ${company.name} ${company.meeting_type}`, html, '', company.from_name || company.name);
           emailSent = true;
         } catch (e) { console.error('Email error:', e.message); }
       }
@@ -317,7 +317,7 @@ module.exports = (models, mailgunService, twilioClient) => {
             <p style="color:#888; font-size:13px; text-align:center;">— Apel Capital Registrars Limited</p>
           </div>
         </body>`;
-        try { await mailgunService.sendEmail(shareholder.email, `✅ Registered – ${company.name} ${company.meeting_type}`, html); } catch {}
+        try { await mailgunService.sendEmail(shareholder.email, `✅ Registered – ${company.name} ${company.meeting_type}`, html, '', company.from_name || company.name); } catch {}
       }
 
       res.send(`<!DOCTYPE html><html><head><title>Registration Complete</title>
@@ -380,7 +380,7 @@ module.exports = (models, mailgunService, twilioClient) => {
       </body>`;
 
       try {
-        await mailgunService.sendEmail(email, `Registration Confirmed – ${company.name} ${company.meeting_type}`, html);
+        await mailgunService.sendEmail(email, `Registration Confirmed – ${company.name} ${company.meeting_type}`, html, '', company.from_name || company.name);
       } catch (e) { console.error('Guest email error:', e.message); }
 
       res.json({ success: true, guest: { id: guest.id, name, email, phone, userType } });

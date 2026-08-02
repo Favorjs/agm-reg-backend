@@ -20,13 +20,13 @@ const mailgun = new Mailgun(formData);
 const mg = mailgun.client({
   username: 'api',
   key: process.env.MAILGUN_API_KEY || 'key-yourkeyhere',
-  url: 'https://api.mailgun.net' // For EU domains use: 'https://api.eu.mailgun.net'
+  url: 'https://api.mailgun.net' 
 });
 
 class MailgunService {
   constructor() {
     this.domain = process.env.MAILGUN_DOMAIN || 'registrars.apel.com.ng';
-    this.fromEmail = process.env.MAILGUN_FROM_EMAIL || 'alerts@registrars.apel.com.ng';
+    this.fromEmail = process.env.MAILGUN_FROM_EMAIL ;
     this.fromName = 'Apel Capital Registrars';
   }
 

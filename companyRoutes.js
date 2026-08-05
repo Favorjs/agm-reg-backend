@@ -150,15 +150,31 @@ module.exports = (models, mailgunService, twilioClient) => {
       const byChn = await CompanyShareholder.findOne({ where: { company_id: companyId, chn: { [Op.iLike]: clean } } });
       if (byChn) return res.json({ status: 'chn_match', shareholder: byChn });
 
-      // Name search
-      const byName = await CompanyShareholder.findAll({
-        where: {
-          company_id: companyId,
-          name: { [Op.iLike]: `%${clean}%` },
-        },
-        order: [['name', 'ASC']],
-        limit: 50,
-      });
+      // Name search — typo-tolerant (pg_trgm similarity) so a slightly
+      // misspelled name still finds the right shareholder; falls back to a
+      // plain substring search if the extension isn't installed on the DB.
+      let byName;
+      try {
+        byName = await CompanyShareholder.sequelize.query(`
+          SELECT id, acno, name, email, phone_number, holdings, chn, rin, address,
+                 GREATEST(similarity(name, :term), word_similarity(:term, name)) AS score
+          FROM company_shareholders
+          WHERE company_id = :companyId
+            AND (name % :term OR name ILIKE '%' || :term || '%')
+          ORDER BY score DESC, name ASC
+          LIMIT 50
+        `, {
+          replacements: { term: clean, companyId },
+          type: CompanyShareholder.sequelize.QueryTypes.SELECT,
+        });
+      } catch (trigramErr) {
+        console.warn('[check-shareholder] pg_trgm unavailable, falling back to ILIKE:', trigramErr.message);
+        byName = await CompanyShareholder.findAll({
+          where: { company_id: companyId, name: { [Op.iLike]: `%${clean}%` } },
+          order: [['name', 'ASC']],
+          limit: 50,
+        });
+      }
       if (byName.length > 0) return res.json({ status: 'name_matches', shareholders: byName });
 
       res.json({ status: 'not_found', message: 'No matching shareholders found.' });

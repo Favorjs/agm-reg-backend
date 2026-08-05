@@ -454,62 +454,10 @@ module.exports = (models, mailgunService) => {
     }
   });
 
-  // ── GET /api/admin/companies/:id/shareholders/search ──────────────────────
-  // Typo-tolerant fuzzy search over the full shareholder DB (not just registered
-  // ones), so admins can find and pick individual recipients. Uses Postgres
-  // pg_trgm similarity when available; falls back to plain ILIKE otherwise.
-  router.get('/companies/:id/shareholders/search', requireAdmin, async (req, res) => {
-    if (!validId(req, res)) return;
-    try {
-      const q = (req.query.q || '').trim();
-      if (!q) return res.json({ data: [] });
-
-      const limit = Math.min(parseInt(req.query.limit) || 50, 200);
-      const sequelize = CompanyShareholder.sequelize;
-      let rows;
-
-      try {
-        rows = await sequelize.query(`
-          SELECT id, acno, name, email, phone_number, holdings, chn,
-                 GREATEST(similarity(name, :q), word_similarity(:q, name)) AS score
-          FROM company_shareholders
-          WHERE company_id = :companyId
-            AND (name % :q OR name ILIKE '%' || :q || '%' OR acno ILIKE '%' || :q || '%' OR email ILIKE '%' || :q || '%')
-          ORDER BY score DESC, name ASC
-          LIMIT :limit
-        `, {
-          replacements: { q, companyId: req.params.id, limit },
-          type: sequelize.QueryTypes.SELECT,
-        });
-      } catch (trigramErr) {
-        console.warn('[shareholders/search] pg_trgm unavailable, falling back to ILIKE:', dbErr(trigramErr));
-        const words = q.split(/\s+/).filter(Boolean);
-        rows = await CompanyShareholder.findAll({
-          where: {
-            company_id: req.params.id,
-            [Op.or]: [
-              { name:  { [Op.iLike]: `%${q}%` } },
-              { acno:  { [Op.iLike]: `%${q}%` } },
-              { email: { [Op.iLike]: `%${q}%` } },
-              ...words.map(w => ({ name: { [Op.iLike]: `%${w}%` } })),
-            ],
-          },
-          order: [['name', 'ASC']],
-          limit,
-        });
-      }
-
-      res.json({ data: rows });
-    } catch (err) {
-      console.error('[GET /shareholders/search]', dbErr(err));
-      res.status(500).json({ error: dbErr(err) });
-    }
-  });
-
-  // ── POST /api/admin/companies/:id/shareholders/send-email ─────────────────
-  // Send the meeting-link email to a hand-picked set of shareholders (by id),
-  // as opposed to /broadcast-email which sends to everyone already registered.
-  router.post('/companies/:id/shareholders/send-email', requireAdmin, async (req, res) => {
+  // ── POST /api/admin/companies/:id/registered-holders/send-email ───────────
+  // Send the meeting-link email to a hand-picked set of already-registered
+  // shareholders (by id), as opposed to /broadcast-email which sends to everyone.
+  router.post('/companies/:id/registered-holders/send-email', requireAdmin, async (req, res) => {
     if (!validId(req, res)) return;
     try {
       const company = await Company.findByPk(req.params.id);
@@ -518,10 +466,10 @@ module.exports = (models, mailgunService) => {
       const ids = Array.isArray(req.body.ids) ? [...new Set(req.body.ids.filter(Boolean))] : [];
       if (ids.length === 0) return res.status(400).json({ error: 'No recipients selected' });
 
-      const shareholders = await CompanyShareholder.findAll({
+      const holders = await CompanyRegisteredHolder.findAll({
         where: { id: ids, company_id: company.id },
       });
-      const recipients = shareholders.filter(s => s.email);
+      const recipients = holders.filter(h => h.email);
 
       if (recipients.length === 0) {
         return res.status(400).json({ error: 'None of the selected shareholders have an email on file' });
@@ -531,21 +479,21 @@ module.exports = (models, mailgunService) => {
       const subject  = `Meeting Access Links — ${company.name} ${company.meeting_type}`;
 
       let sent = 0, failed = 0;
-      for (const s of recipients) {
+      for (const h of recipients) {
         try {
-          await mailgunService.sendEmail(s.email, subject, buildMeetingEmailHtml(company, s.name), '', fromName);
+          await mailgunService.sendEmail(h.email, subject, buildMeetingEmailHtml(company, h.name), '', fromName);
           sent++;
         } catch (err) {
-          console.error(`[send-email] failed to send to ${s.email}:`, err.message);
+          console.error(`[registered-holders/send-email] failed to send to ${h.email}:`, err.message);
           failed++;
         }
       }
 
-      const skippedNoEmail = shareholders.length - recipients.length;
-      console.log(`[send-email] company=${company.id} sent=${sent} failed=${failed} skippedNoEmail=${skippedNoEmail}`);
+      const skippedNoEmail = holders.length - recipients.length;
+      console.log(`[registered-holders/send-email] company=${company.id} sent=${sent} failed=${failed} skippedNoEmail=${skippedNoEmail}`);
       res.json({ success: true, sent, failed, skippedNoEmail, total: ids.length });
     } catch (err) {
-      console.error('[POST /shareholders/send-email]', dbErr(err));
+      console.error('[POST /registered-holders/send-email]', dbErr(err));
       res.status(500).json({ error: dbErr(err) });
     }
   });

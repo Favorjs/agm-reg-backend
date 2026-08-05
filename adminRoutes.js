@@ -6,6 +6,7 @@ const multer = require('multer');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
 const XLSX = require('xlsx');
+const { Op } = require('sequelize');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
 
@@ -58,6 +59,74 @@ const logoStorage = new CloudinaryStorage({
   }),
 });
 const uploadLogo = multer({ storage: logoStorage });
+
+// ── Meeting-link email template (shared by broadcast + selected-recipient send) ──
+function fmtDate(d) {
+  if (!d) return 'TBA';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    });
+  }
+  return d;
+}
+function fmtTime(t) {
+  if (!t) return '';
+  if (/[ap]m/i.test(t)) return t;
+  const [h, m] = t.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+
+function buildMeetingEmailHtml(company, name) {
+  const meetingDate = fmtDate(company.meeting_date);
+  const meetingTime = fmtTime(company.meeting_time);
+  const zoomLink    = company.zoom_link;
+  const youtubeLink = company.youtube_link;
+  const fromName    = company.from_name || 'Apel Capital Registrars';
+
+  return `
+    <body style="font-family:Arial,sans-serif;background:#f6f9fc;padding:20px;color:#333;">
+      <div style="max-width:600px;margin:auto;background:#fff;padding:25px;border-radius:10px;box-shadow:0 4px 10px rgba(0,0,0,.1);">
+
+        <h2 style="color:#0f3d2e;text-align:center;">${company.name}</h2>
+        <p style="text-align:center;margin:-10px 0 20px;color:#64748b;font-size:14px;">${company.meeting_type} — Meeting Access Links</p>
+
+        <p style="font-size:15px;line-height:1.6;">Dear <strong>${name}</strong>,</p>
+        <p style="font-size:15px;line-height:1.6;">
+          Please find below the access links for the upcoming <strong>${company.name} ${company.meeting_type}</strong>.
+        </p>
+
+        <div style="background:#f1f5f9;padding:15px;border-radius:8px;margin:20px 0;">
+          <p style="margin:5px 0;"><strong>📅 Date:</strong> ${meetingDate}</p>
+          ${meetingTime ? `<p style="margin:5px 0;"><strong>🕐 Time:</strong> ${meetingTime}</p>` : ''}
+        </div>
+
+        ${zoomLink ? `
+        <div style="text-align:center;margin:20px 0;">
+          <p style="font-weight:bold;color:#0f3d2e;margin-bottom:8px;">Join / Vote via Zoom</p>
+          <a href="${zoomLink}"
+             style="background:#0f3d2e;color:#fff;padding:13px 28px;text-decoration:none;border-radius:6px;font-size:15px;font-weight:bold;display:inline-block;">
+            🎥 Join Zoom Meeting
+          </a>
+        </div>` : ''}
+
+        ${youtubeLink ? `
+        <div style="text-align:center;margin:20px 0;">
+          <p style="font-weight:bold;color:#dc2626;margin-bottom:8px;">Watch Live on YouTube</p>
+          <a href="${youtubeLink}"
+             style="background:#dc2626;color:#fff;padding:13px 28px;text-decoration:none;border-radius:6px;font-size:15px;font-weight:bold;display:inline-block;">
+            ▶ Watch Live Stream
+          </a>
+        </div>` : ''}
+
+        <p style="margin-top:30px;font-size:13px;text-align:center;color:#64748b;">
+          For enquiries contact us at <a href="mailto:registrars@apel.com.ng" style="color:#0f3d2e;">registrars@apel.com.ng</a><br>
+          <em>— ${fromName}</em>
+        </p>
+      </div>
+    </body>
+  `;
+}
 
 // ── Mount routes with models injected ───────────────────────────────────────
 module.exports = (models, mailgunService) => {
@@ -362,78 +431,14 @@ module.exports = (models, mailgunService) => {
         return res.status(400).json({ error: 'No registered emails to send to' });
       }
 
-      // Format stored date/time values for display
-      function fmtDate(d) {
-        if (!d) return 'TBA';
-        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-          return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', {
-            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-          });
-        }
-        return d;
-      }
-      function fmtTime(t) {
-        if (!t) return '';
-        if (/[ap]m/i.test(t)) return t;
-        const [h, m] = t.split(':').map(Number);
-        return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
-      }
-
-      const meetingDate = fmtDate(company.meeting_date);
-      const meetingTime = fmtTime(company.meeting_time);
-      const zoomLink    = company.zoom_link;
-      const youtubeLink = company.youtube_link;
-      const fromName    = company.from_name || 'Apel Capital Registrars';
-
-      const buildHtml = (name) => `
-        <body style="font-family:Arial,sans-serif;background:#f6f9fc;padding:20px;color:#333;">
-          <div style="max-width:600px;margin:auto;background:#fff;padding:25px;border-radius:10px;box-shadow:0 4px 10px rgba(0,0,0,.1);">
-
-            <h2 style="color:#0f3d2e;text-align:center;">${company.name}</h2>
-            <p style="text-align:center;margin:-10px 0 20px;color:#64748b;font-size:14px;">${company.meeting_type} — Meeting Access Links</p>
-
-            <p style="font-size:15px;line-height:1.6;">Dear <strong>${name}</strong>,</p>
-            <p style="font-size:15px;line-height:1.6;">
-              Please find below the access links for the upcoming <strong>${company.name} ${company.meeting_type}</strong>.
-            </p>
-
-            <div style="background:#f1f5f9;padding:15px;border-radius:8px;margin:20px 0;">
-              <p style="margin:5px 0;"><strong>📅 Date:</strong> ${meetingDate}</p>
-              ${meetingTime ? `<p style="margin:5px 0;"><strong>🕐 Time:</strong> ${meetingTime}</p>` : ''}
-            </div>
-
-            ${zoomLink ? `
-            <div style="text-align:center;margin:20px 0;">
-              <p style="font-weight:bold;color:#0f3d2e;margin-bottom:8px;">Join / Vote via Zoom</p>
-              <a href="${zoomLink}"
-                 style="background:#0f3d2e;color:#fff;padding:13px 28px;text-decoration:none;border-radius:6px;font-size:15px;font-weight:bold;display:inline-block;">
-                🎥 Join Zoom Meeting
-              </a>
-            </div>` : ''}
-
-            ${youtubeLink ? `
-            <div style="text-align:center;margin:20px 0;">
-              <p style="font-weight:bold;color:#dc2626;margin-bottom:8px;">Watch Live on YouTube</p>
-              <a href="${youtubeLink}"
-                 style="background:#dc2626;color:#fff;padding:13px 28px;text-decoration:none;border-radius:6px;font-size:15px;font-weight:bold;display:inline-block;">
-                ▶ Watch Live Stream
-              </a>
-            </div>` : ''}
-
-            <p style="margin-top:30px;font-size:13px;text-align:center;color:#64748b;">
-              For enquiries contact us at <a href="mailto:registrars@apel.com.ng" style="color:#0f3d2e;">registrars@apel.com.ng</a><br>
-              <em>— ${fromName}</em>
-            </p>
-          </div>
-        </body>
-      `;
+      const fromName = company.from_name || 'Apel Capital Registrars';
+      const subject  = `Meeting Access Links — ${company.name} ${company.meeting_type}`;
 
       let sent = 0, failed = 0;
-      const subject = `Meeting Access Links — ${company.name} ${company.meeting_type}`;
 
       for (const { name, email } of recipients.values()) {
         try {
-          await mailgunService.sendEmail(email, subject, buildHtml(name), '', fromName);
+          await mailgunService.sendEmail(email, subject, buildMeetingEmailHtml(company, name), '', fromName);
           sent++;
         } catch (err) {
           console.error(`[broadcast] failed to send to ${email}:`, err.message);
@@ -445,6 +450,102 @@ module.exports = (models, mailgunService) => {
       res.json({ success: true, sent, failed, total: recipients.size });
     } catch (err) {
       console.error('[POST /broadcast-email]', dbErr(err));
+      res.status(500).json({ error: dbErr(err) });
+    }
+  });
+
+  // ── GET /api/admin/companies/:id/shareholders/search ──────────────────────
+  // Typo-tolerant fuzzy search over the full shareholder DB (not just registered
+  // ones), so admins can find and pick individual recipients. Uses Postgres
+  // pg_trgm similarity when available; falls back to plain ILIKE otherwise.
+  router.get('/companies/:id/shareholders/search', requireAdmin, async (req, res) => {
+    if (!validId(req, res)) return;
+    try {
+      const q = (req.query.q || '').trim();
+      if (!q) return res.json({ data: [] });
+
+      const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+      const sequelize = CompanyShareholder.sequelize;
+      let rows;
+
+      try {
+        rows = await sequelize.query(`
+          SELECT id, acno, name, email, phone_number, holdings, chn,
+                 GREATEST(similarity(name, :q), word_similarity(:q, name)) AS score
+          FROM company_shareholders
+          WHERE company_id = :companyId
+            AND (name % :q OR name ILIKE '%' || :q || '%' OR acno ILIKE '%' || :q || '%' OR email ILIKE '%' || :q || '%')
+          ORDER BY score DESC, name ASC
+          LIMIT :limit
+        `, {
+          replacements: { q, companyId: req.params.id, limit },
+          type: sequelize.QueryTypes.SELECT,
+        });
+      } catch (trigramErr) {
+        console.warn('[shareholders/search] pg_trgm unavailable, falling back to ILIKE:', dbErr(trigramErr));
+        const words = q.split(/\s+/).filter(Boolean);
+        rows = await CompanyShareholder.findAll({
+          where: {
+            company_id: req.params.id,
+            [Op.or]: [
+              { name:  { [Op.iLike]: `%${q}%` } },
+              { acno:  { [Op.iLike]: `%${q}%` } },
+              { email: { [Op.iLike]: `%${q}%` } },
+              ...words.map(w => ({ name: { [Op.iLike]: `%${w}%` } })),
+            ],
+          },
+          order: [['name', 'ASC']],
+          limit,
+        });
+      }
+
+      res.json({ data: rows });
+    } catch (err) {
+      console.error('[GET /shareholders/search]', dbErr(err));
+      res.status(500).json({ error: dbErr(err) });
+    }
+  });
+
+  // ── POST /api/admin/companies/:id/shareholders/send-email ─────────────────
+  // Send the meeting-link email to a hand-picked set of shareholders (by id),
+  // as opposed to /broadcast-email which sends to everyone already registered.
+  router.post('/companies/:id/shareholders/send-email', requireAdmin, async (req, res) => {
+    if (!validId(req, res)) return;
+    try {
+      const company = await Company.findByPk(req.params.id);
+      if (!company) return res.status(404).json({ error: 'Company not found' });
+
+      const ids = Array.isArray(req.body.ids) ? [...new Set(req.body.ids.filter(Boolean))] : [];
+      if (ids.length === 0) return res.status(400).json({ error: 'No recipients selected' });
+
+      const shareholders = await CompanyShareholder.findAll({
+        where: { id: ids, company_id: company.id },
+      });
+      const recipients = shareholders.filter(s => s.email);
+
+      if (recipients.length === 0) {
+        return res.status(400).json({ error: 'None of the selected shareholders have an email on file' });
+      }
+
+      const fromName = company.from_name || 'Apel Capital Registrars';
+      const subject  = `Meeting Access Links — ${company.name} ${company.meeting_type}`;
+
+      let sent = 0, failed = 0;
+      for (const s of recipients) {
+        try {
+          await mailgunService.sendEmail(s.email, subject, buildMeetingEmailHtml(company, s.name), '', fromName);
+          sent++;
+        } catch (err) {
+          console.error(`[send-email] failed to send to ${s.email}:`, err.message);
+          failed++;
+        }
+      }
+
+      const skippedNoEmail = shareholders.length - recipients.length;
+      console.log(`[send-email] company=${company.id} sent=${sent} failed=${failed} skippedNoEmail=${skippedNoEmail}`);
+      res.json({ success: true, sent, failed, skippedNoEmail, total: ids.length });
+    } catch (err) {
+      console.error('[POST /shareholders/send-email]', dbErr(err));
       res.status(500).json({ error: dbErr(err) });
     }
   });

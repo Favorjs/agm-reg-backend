@@ -1229,6 +1229,21 @@ async function runMigrations() {
   // subdomain was NOT NULL — relax it so new companies don't need one
   await dropNotNull('companies', 'subdomain');
 
+  // Fuzzy/typo-tolerant shareholder name search (pg_trgm) — powers the admin
+  // "search & select recipients" feature. Falls back to plain ILIKE search
+  // in adminRoutes.js if the extension can't be installed (e.g. no
+  // superuser on a managed DB), so this failing is non-fatal.
+  try {
+    await sequelize.query('CREATE EXTENSION IF NOT EXISTS pg_trgm');
+    await sequelize.query(`
+      CREATE INDEX IF NOT EXISTS company_shareholders_name_trgm_idx
+      ON company_shareholders USING gin (name gin_trgm_ops)
+    `);
+    console.log('✅ Migration: pg_trgm + trigram index OK');
+  } catch (e) {
+    console.warn(`⚠️  Migration (pg_trgm): ${e?.original?.message || e.message} — fuzzy search will fall back to ILIKE`);
+  }
+
   console.log('✅ All migrations complete');
 }
 
